@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Juego de la Serpiente con Bloques</title>
+  <style>
+    body { display: flex; gap: 20px; font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f0f2f5; user-select: none; }
+    #panel-juego { display: flex; flex-direction: column; align-items: center; }
+    #juego-canvas { border: 3px solid #2f3640; background: #1e272e; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+    #marcador { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #2f3640; }
+    #mensaje { margin-top: 10px; font-weight: bold; font-size: 18px; min-height: 24px; text-align: center; max-width: 400px; }
+    
+    .btn { margin-top: 12px; padding: 10px 22px; font-size: 16px; font-weight: bold; color: white; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+    .btn-run { background: #e04f3e; }
+    .btn-run:hover { background: #c93d2d; }
+    .btn-reset { background: #57606f; }
+    .btn-reset:hover { background: #2f3542; }
+
+    /* Área de bloques */
+    #area-bloques { display: flex; gap: 15px; background: white; padding: 15px; border-radius: 8px; border: 2px solid #dcdde1; height: 440px; width: 560px; }
+    #toolbox { width: 210px; background: #f5f6fa; padding: 10px; border-radius: 6px; border-right: 2px solid #dcdde1; display: flex; flex-direction: column; gap: 10px; }
+    #workspace { flex: 1; background: #ffffff; padding: 15px; border-radius: 6px; border: 2px dashed #e04f3e; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    
+    .titulo-panel { font-size: 13px; text-transform: uppercase; color: #7f8fa6; font-weight: bold; margin-bottom: 5px; }
+
+    /* Estilo visual de los bloques */
+    .bloque {
+      padding: 10px 14px; color: white; font-weight: bold; font-size: 14px; border-radius: 6px;
+      cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 3px 0 rgba(0,0,0,0.2);
+    }
+    .bloque:active { transform: translateY(2px); box-shadow: none; }
+    .bloque-mov { background: #8c7ae6; }
+    .bloque-loop { background: #44bd32; flex-direction: column; align-items: stretch; gap: 8px; }
+    .loop-header { display: flex; align-items: center; justify-content: space-between; }
+    .loop-input { width: 45px; padding: 2px 5px; border-radius: 4px; border: none; font-weight: bold; text-align: center; }
+    .loop-body { background: rgba(0,0,0,0.15); min-height: 50px; padding: 8px; border-radius: 4px; display: flex; flex-direction: column; gap: 6px; border: 1px dashed rgba(255,255,255,0.6); }
+    .btn-borrar { background: rgba(0,0,0,0.25); border: none; color: white; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; font-size: 12px; }
+    .btn-borrar:hover { background: #e84118; }
+  </style>
+</head>
+<body>
+
+  <!-- PANEL IZQUIERDO: JUEGO -->
+  <div id="panel-juego">
+    <div id="marcador">Puntos: <span id="puntos">0</span> | Largo: <span id="largo">3</span></div>
+    <canvas id="juego-canvas" width="400" height="400"></canvas>
+    <div>
+      <button class="btn btn-run" onclick="ejecutarCodigo()">▶ Run Program</button>
+      <button class="btn btn-reset" onclick="reiniciarJuego()">↺ Reiniciar</button>
+    </div>
+    <div id="mensaje"></div>
+  </div>
+
+  <!-- PANEL DERECHO: BLOQUES -->
+  <div id="area-bloques">
+    <div id="toolbox">
+      <div class="titulo-panel">Haz clic para añadir</div>
+      <div class="bloque bloque-mov" onclick="agregarBloque('avanzar', event)">⬆ avanzar</div>
+      <div class="bloque bloque-mov" onclick="agregarBloque('izquierda', event)">↺ girar izquierda</div>
+      <div class="bloque bloque-mov" onclick="agregarBloque('derecha', event)">↻ girar derecha</div>
+      <div class="bloque bloque-loop" onclick="agregarBloque('repetir', event)">
+        <span>🔁 repetir (N) veces</span>
+      </div>
+      <button class="btn btn-reset" style="margin-top:auto; font-size:13px; padding:8px;" onclick="limpiarWorkspace()">🗑 Limpiar todo</button>
+    </div>
+
+    <div id="workspace">
+      <div class="titulo-panel">Tu Programa (Los bloques caen aquí)</div>
+    </div>
+  </div>
+
+  <script>
+    const workspace =criptor = document.getElementById('workspace');
+
+    function agregarBloque(tipo, evento) {
+      evento.stopPropagation();
+      const workspaceDiv = document.getElementById('workspace');
+
+      const bloque = document.createElement('div');
+      bloque.dataset.tipo = tipo;
+
+      if (tipo === 'repetir') {
+        bloque.className = 'bloque bloque-loop';
+        bloque.innerHTML = `
+          <div class="loop-header">
+            <span>🔁 repetir <input type="number" class="loop-input" value="4" min="1" max="50" onclick="event.stopPropagation()"> veces</span>
+            <button class="btn-borrar" onclick="eliminarBloque(event, this)">✕</button>
+          </div>
+          <div class="loop-body" data-cuerpo="true"></div>
+        `;
+        workspaceDiv.appendChild(bloque);
+      } else {
+        bloque.className = 'bloque bloque-mov';
+        const textos = {
+          'avanzar': '⬆ avanzar',
+          'izquierda': '↺ girar izquierda',
+          'derecha': '↻ girar derecha'
+        };
+        bloque.innerHTML = `
+          <span>${textos[tipo]}</span>
+          <button class="btn-borrar" onclick="eliminarBloque(event, this)">✕</button>
+        `;
+
+        // Si hay un bucle repetir creado, mete el bloque de avanzar adentro automáticamente
+        const ultimoLoop = workspaceDiv.querySelector('.bloque-loop:last-child .loop-body');
+        if (ultimoLoop && workspaceDiv.lastElementChild.classList.contains('bloque-loop')) {
+          ultimoLoop.appendChild(bloque);
+        } else {
+          workspaceDiv.appendChild(bloque);
+        }
+      }
+    }
+
+    function eliminarBloque(event, boton) {
+      event.stopPropagation();
+      boton.closest('.bloque').remove();
+    }
+
+    function limpiarWorkspace() {
+      const workspaceDiv = document.getElementById('workspace');
+      workspaceDiv.innerHTML = '<div class="titulo-panel">Tu Programa (Los bloques caen aquí)</div>';
+    }
+
+    // --- LÓGICA DE LA SERPIENTE ---
+    const canvas = document.getElementById('juego-canvas');
+    const ctx = canvas.getContext('2d');
+    const TAM = 25;
+    const CELDAS = canvas.width / TAM;
+
+    let serpiente = [];
+    let dir = 0; 
+    let comida = { x: 8, y: 5 };
+    let puntos = 0;
+    let intervalo = null;
+
+    function generarComida() {
+      let valida = false;
+      while (!valida) {
+        comida.x = Math.floor(Math.random() * CELDAS);
+        comida.y = Math.floor(Math.random() * CELDAS);
+        valida = !serpiente.some(seg => seg.x === comida.x && seg.y === comida.y);
+      }
+    }
+
+    function actualizarMarcador() {
+      document.getElementById('puntos').textContent = puntos;
+      document.getElementById('largo').textContent = serpiente.length;
+    }
+
+    function dibujar() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = '#2f3640';
+      for (let i = 0; i < CELDAS; i++) {
+        for (let j = 0; j < CELDAS; j++) {
+          ctx.strokeRect(i * TAM, j * TAM, TAM, TAM);
+        }
+      }
+
+      ctx.fillStyle = '#ff3f34';
+      ctx.beginPath();
+      ctx.arc(comida.x * TAM + TAM / 2, comida.y * TAM + TAM / 2, TAM / 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      serpiente.forEach((segmento, index) => {
+        ctx.fillStyle = index === 0 ? '#0be881' : '#05c46b';
+        ctx.fillRect(segmento.x * TAM + 1, segmento.y * TAM + 1, TAM - 2, TAM - 2);
+
+        if (index === 0) {
+          ctx.fillStyle = '#1e272e';
+          ctx.beginPath();
+          ctx.arc(segmento.x * TAM + TAM / 2, segmento.y * TAM + TAM / 2, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+
+    function reiniciarJuego() {
+      clearInterval(intervalo);
+      serpiente = [{ x: 4, y: 5 }, { x: 3, y: 5 }, { x: 2, y: 5 }];
+      dir = 0;
+      puntos = 0;
+      comida = { x: 8, y: 5 };
+      document.getElementById('mensaje').textContent = '';
+      actualizarMarcador();
+      dibujar();
+    }
+
+    function compilarBloques(contenedor) {
+      let pasos = [];
+      const hijos = Array.from(contenedor.children).filter(el => el.classList.contains('bloque'));
+
+      for (const bloque of hijos) {
+        const tipo = bloque.dataset.tipo;
+        if (tipo === 'repetir') {
+          const veces = parseInt(bloque.querySelector('.loop-input').value) || 1;
+          const cuerpo = bloque.querySelector('.loop-body');
+          const subPasos = compilarBloques(cuerpo);
+          for (let i = 0; i < veces; i++) {
+            pasos = pasos.concat(subPasos);
+          }
+        } else {
+          pasos.push(tipo);
+        }
+      }
+      return pasos;
+    }
+
+    function ejecutarCodigo() {
+      clearInterval(intervalo);
+      document.getElementById('mensaje').textContent = '';
+
+      const workspaceDiv = document.getElementById('workspace');
+      const colaAcciones = compilarBloques(workspaceDiv);
+
+      if (colaAcciones.length === 0) {
+        document.getElementById('mensaje').style.color = '#e67e22';
+        document.getElementById('mensaje').textContent = '⚠ Haz clic en los bloques de la izquierda para agregarlos.';
+        return;
+      }
+
+      intervalo = setInterval(() => {
+        if (colaAcciones.length === 0) {
+          clearInterval(intervalo);
+          return;
+        }
+
+        const accion = colaAcciones.shift();
+        if (accion === 'izquierda') dir = (dir + 3) % 4;
+        if (accion === 'derecha') dir = (dir + 1) % 4;
+
+        if (accion === 'avanzar') {
+          const cabeza = serpiente[0];
+          const nuevaCabeza = {
+            x: cabeza.x + (dir === 0 ? 1 : dir === 2 ? -1 : 0),
+            y: cabeza.y + (dir === 1 ? 1 : dir === 3 ? -1 : 0)
+          };
+
+          if (nuevaCabeza.x < 0 || nuevaCabeza.x >= CELDAS || nuevaCabeza.y < 0 || nuevaCabeza.y >= CELDAS) {
+            document.getElementById('mensaje').style.color = '#d32f2f';
+            document.getElementById('mensaje').textContent = '💥 ¡Chocaste contra el borde!';
+            clearInterval(intervalo);
+            return;
+          }
+
+          if (serpiente.some(seg => seg.x === nuevaCabeza.x && seg.y === nuevaCabeza.y)) {
+            document.getElementById('mensaje').style.color = '#d32f2f';
+            document.getElementById('mensaje').textContent = '💥 ¡Te mordiste la cola!';
+            clearInterval(intervalo);
+            return;
+          }
+
+          serpiente.unshift(nuevaCabeza);
+
+          if (nuevaCabeza.x === comida.x && nuevaCabeza.y === comida.y) {
+            puntos += 10;
+            actualizarMarcador();
+            generarComida();
+          } else {
+            serpiente.pop();
+          }
+        }
+
+        dibujar();
+      }, 280);
+    }
+
+    reiniciarJuego();
+  </script>
+</body>
+</html>
